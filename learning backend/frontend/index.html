@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Backend Learning Lab • Auth & Subscriptions</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" >
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <div>
+        <h1>Backend Learning Lab <span>Interactive API Client</span></h1>
+      </div>
+    </div>
+
+    <div class="backend-switcher">
+      <button id="btnGo" class="switch-btn active-go" onclick="switchBackend('go')">
+        <span class="status-dot"></span> Golang (Port 8080)
+      </button>
+      <button id="btnExpress" class="switch-btn" onclick="switchBackend('express')">
+        <span class="status-dot"></span> Express.js (Port 5000)
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <!-- LEFT COLUMN: AUTH PANEL -->
+    <div>
+      <div class="card" id="authBox">
+        <div id="unauthenticatedView">
+          <div class="auth-tabs">
+            <button class="auth-tab active" id="tabLogin" onclick="setAuthTab('login')">Sign In</button>
+            <button class="auth-tab" id="tabRegister" onclick="setAuthTab('register')">Create Account</button>
+          </div>
+
+          <div id="registerFields" style="display: none;">
+            <div class="form-group">
+              <label>Full Name</label>
+              <input type="text" id="regName" class="form-input" placeholder="e.g. Alex Morgan" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="authEmail" class="form-input" placeholder="you@example.com" value="demo@example.com" />
+          </div>
+
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="authPassword" class="form-input" placeholder="••••••••" value="password123" />
+          </div>
+
+          <button id="btnSubmitAuth" class="btn" onclick="handleAuthSubmit()">
+            Sign In with JWT
+          </button>
+
+          <div class="quick-creds">
+            <div class="quick-creds-title">
+              <span>Demo Seed Credentials</span>
+              <button class="fill-btn" onclick="fillDemoCreds()">Use Demo</button>
+            </div>
+            <div>Email: <strong style="color: #fff;">demo@example.com</strong></div>
+            <div>Pass: <strong style="color: #fff;">password123</strong> (Hashed with bcrypt)</div>
+          </div>
+        </div>
+
+        <div id="authenticatedView" style="display: none;">
+          <div class="user-profile-badge">
+            <div class="avatar" id="userInitial">U</div>
+            <div style="flex: 1; overflow: hidden;">
+              <h3 id="userName" style="font-size: 1rem; font-weight: 700;">Logged In User</h3>
+              <p id="userEmail" style="font-size: 0.8rem; color: var(--text-muted); text-overflow: ellipsis; overflow: hidden;">user@example.com</p>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            <button class="btn btn-secondary" onclick="fetchSubscriptions()">
+              🔄 Refresh Plans
+            </button>
+            <button class="btn btn-danger" onclick="logout()">
+              Sign Out
+            </button>
+          </div>
+
+          <button class="btn btn-secondary" style="font-size: 0.8rem; margin-bottom: 12px;" onclick="testUnauthorized()">
+            🛡️ Test Request Without Token (Simulate Attack)
+          </button>
+
+          <div class="jwt-inspector">
+            <div style="font-weight: 700; color: var(--text-muted); margin-bottom: 6px; font-size: 0.72rem; text-transform: uppercase;">
+              Active JWT Bearer Token:
+            </div>
+            <div id="jwtColorized"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN: SUBSCRIPTION PLANS & LOGS -->
+    <div>
+      <div class="plans-header">
+        <div>
+          <h2>Available Subscription Plans</h2>
+          <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 4px;">
+            Protected Endpoint: <code style="font-family: var(--font-mono); color: var(--accent-go);">GET /api/subscriptions</code>
+          </p>
+        </div>
+        <div id="activeTierIndicator" style="display: none;" class="active-tag">
+          Active Plan: <span id="activeTierText">FREE</span>
+        </div>
+      </div>
+
+      <div id="plansContainer" class="plans-grid">
+        <!-- Rendered dynamically -->
+        <div class="plan-card" style="grid-column: 1 / -1; text-align: center; padding: 48px 24px;">
+          <div style="font-size: 2.5rem; margin-bottom: 12px;">🔒</div>
+          <h3 style="margin-bottom: 8px;">Authentication Required</h3>
+          <p style="color: var(--text-muted); max-width: 420px; margin: 0 auto 20px;">
+            Please log in or register on the left to test the backend JWT authorization middleware and view live subscription tiers.
+          </p>
+        </div>
+      </div>
+
+      <!-- Real-time API Inspector Console -->
+      <div class="console-section">
+        <div class="console-header">
+          <span>📡 Live HTTP Request & Security Inspector</span>
+          <span id="currentEndpointLabel">http://localhost:8080</span>
+        </div>
+        <div class="console-body" id="consoleOutput">Waiting for actions... Click Sign In or Create Account to test API.</div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let activeBackend = 'go'; // 'go' or 'express'
+    let currentToken = localStorage.getItem('token') || '';
+    let currentUser = null;
+    let authMode = 'login'; // 'login' or 'register'
+
+    const getBaseUrl = () => {
+      return activeBackend === 'go' ? 'http://localhost:8080' : 'http://localhost:5000';
+    };
+
+    const logToConsole = (title, data) => {
+      const consoleEl = document.getElementById('consoleOutput');
+      const time = new Date().toLocaleTimeString();
+      consoleEl.innerHTML = `[${time}] ${title}\n` + (typeof data === 'object' ? JSON.stringify(data, null, 2) : data);
+    };
+
+    function switchBackend(backend) {
+      activeBackend = backend;
+      const btnGo = document.getElementById('btnGo');
+      const btnExpress = document.getElementById('btnExpress');
+      const label = document.getElementById('currentEndpointLabel');
+
+      if (backend === 'go') {
+        btnGo.className = 'switch-btn active-go';
+        btnExpress.className = 'switch-btn';
+        label.textContent = 'http://localhost:8080 (Golang)';
+      } else {
+        btnGo.className = 'switch-btn';
+        btnExpress.className = 'switch-btn active-express';
+        label.textContent = 'http://localhost:5000 (Express.js)';
+      }
+
+      logToConsole(`Switched active backend target to ${backend.toUpperCase()}`, {
+        baseUrl: getBaseUrl(),
+        authNote: 'Both backends share identical API contracts and JWT verification rules!'
+      });
+
+      if (currentToken) {
+        fetchSubscriptions();
+      }
+    }
+
+    function setAuthTab(mode) {
+      authMode = mode;
+      document.getElementById('tabLogin').className = mode === 'login' ? 'auth-tab active' : 'auth-tab';
+      document.getElementById('tabRegister').className = mode === 'register' ? 'auth-tab active' : 'auth-tab';
+      document.getElementById('registerFields').style.display = mode === 'register' ? 'block' : 'none';
+      document.getElementById('btnSubmitAuth').textContent = mode === 'register' ? 'Register & Generate JWT' : 'Sign In with JWT';
+    }
+
+    function fillDemoCreds() {
+      document.getElementById('authEmail').value = 'demo@example.com';
+      document.getElementById('authPassword').value = 'password123';
+      setAuthTab('login');
+    }
+
+    async function handleAuthSubmit() {
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPassword').value;
+      const baseUrl = getBaseUrl();
+
+      let url = `${baseUrl}/api/login`;
+      let payload = { email, password };
+
+      if (authMode === 'register') {
+        const name = document.getElementById('regName').value.trim();
+        url = `${baseUrl}/api/register`;
+        payload.name = name;
+      }
+
+      logToConsole(`Sending POST Request -> ${url}`, payload);
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        logToConsole(`HTTP ${response.status} Response from ${url}:`, data);
+
+        if (!response.ok) {
+          alert(data.error || 'Authentication error');
+          return;
+        }
+
+        currentToken = data.token;
+        currentUser = data.user;
+        localStorage.setItem('token', currentToken);
+        localStorage.setItem('user', JSON.stringify(currentUser));
+
+        renderAuthenticatedState();
+        fetchSubscriptions();
+      } catch (err) {
+        logToConsole(`Network / Fetch Error connecting to ${baseUrl}:`, err.message);
+        alert(`Could not connect to ${baseUrl}. Make sure the backend server is running! Check README or terminal.`);
+      }
+    }
+
+    function renderAuthenticatedState() {
+      document.getElementById('unauthenticatedView').style.display = 'none';
+      document.getElementById('authenticatedView').style.display = 'block';
+
+      if (currentUser) {
+        document.getElementById('userName').textContent = currentUser.name || 'Developer';
+        document.getElementById('userEmail').textContent = currentUser.email || '';
+        document.getElementById('userInitial').textContent = (currentUser.name || 'D')[0].toUpperCase();
+      }
+
+      // Display colorized JWT parts (Header.Payload.Signature)
+      if (currentToken) {
+        const parts = currentToken.split('.');
+        if (parts.length === 3) {
+          document.getElementById('jwtColorized').innerHTML = `
+            <span class="jwt-header">${parts[0]}</span>.<span class="jwt-payload">${parts[1]}</span>.<span class="jwt-sig">${parts[2]}</span>
+          `;
+        }
+      }
+    }
+
+    async function fetchSubscriptions() {
+      const baseUrl = getBaseUrl();
+      const url = `${baseUrl}/api/subscriptions`;
+
+      logToConsole(`Sending Authenticated GET -> ${url} with Bearer Token:`, {
+        Header: `Authorization: Bearer ${currentToken.slice(0, 25)}...`
+      });
+
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentToken}`
+          }
+        });
+
+        const data = await response.json();
+        logToConsole(`HTTP ${response.status} Protected Subscriptions Response:`, data);
+
+        if (!response.ok) {
+          alert(data.error || 'Failed to fetch subscriptions');
+          return;
+        }
+
+        renderPlans(data.plans, data.currentUserPlan);
+      } catch (err) {
+        logToConsole('Error fetching subscriptions:', err.message);
+      }
+    }
+
+    function renderPlans(plans, userPlan) {
+      const container = document.getElementById('plansContainer');
+      const activeIndicator = document.getElementById('activeTierIndicator');
+      const activeText = document.getElementById('activeTierText');
+
+      activeIndicator.style.display = 'block';
+      activeText.textContent = (userPlan || 'free').toUpperCase();
+
+      container.innerHTML = plans.map(p => {
+        const isCurrent = p.id === userPlan;
+        return `
+          <div class="plan-card ${p.is_popular || p.isPopular ? 'popular' : ''}">
+            ${(p.is_popular || p.isPopular) ? '<div class="plan-badge">Most Popular</div>' : ''}
+            <div class="plan-name">${p.name}</div>
+            <div class="plan-desc">${p.description}</div>
+            <div class="plan-price">
+              $${p.price_monthly !== undefined ? p.price_monthly : p.priceMonthly}
+              <span>/ month</span>
+            </div>
+            <ul class="plan-features">
+              ${p.features.map(f => `<li>${f}</li>`).join('')}
+            </ul>
+            ${isCurrent 
+              ? '<div class="active-tag">Current Active Plan</div>' 
+              : '<button class="btn btn-secondary" onclick="alert(\'Plan upgrade flow: in a full production app, this connects to Stripe/Paddle billing!\')">Select Plan</button>'
+            }
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function testUnauthorized() {
+      const baseUrl = getBaseUrl();
+      const url = `${baseUrl}/api/subscriptions`;
+
+      logToConsole(`Sending UNAUTHENTICATED GET (No Token) -> ${url}`, {
+        purpose: 'Demonstrate that backend middleware rejects unauthorized requests with 401'
+      });
+
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+        logToConsole(`HTTP ${response.status} (Security Check Passed! Token was rejected as expected):`, data);
+        alert(`Security in action! Backend returned HTTP ${response.status}:\n"${data.error}"`);
+      } catch (err) {
+        logToConsole('Network error during test:', err.message);
+      }
+    }
+
+    function logout() {
+      currentToken = '';
+      currentUser = null;
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      document.getElementById('unauthenticatedView').style.display = 'block';
+      document.getElementById('authenticatedView').style.display = 'none';
+      document.getElementById('activeTierIndicator').style.display = 'none';
+      document.getElementById('plansContainer').innerHTML = `
+        <div class="plan-card" style="grid-column: 1 / -1; text-align: center; padding: 48px 24px;">
+          <div style="font-size: 2.5rem; margin-bottom: 12px;">🔒</div>
+          <h3 style="margin-bottom: 8px;">Logged Out</h3>
+          <p style="color: var(--text-muted); max-width: 420px; margin: 0 auto;">
+            Token cleared from browser storage. Login again to inspect subscription plans.
+          </p>
+        </div>
+      `;
+      logToConsole('Logged out. Token cleared.', { currentToken: null });
+    }
+
+    // Auto-restore session if token exists
+    try {
+      const savedUser = localStorage.getItem('user');
+      if (currentToken && savedUser) {
+        currentUser = JSON.parse(savedUser);
+        renderAuthenticatedState();
+        fetchSubscriptions();
+      }
+    } catch(e) {}
+  </script>
+</body>
+</html>

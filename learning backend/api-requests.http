@@ -1,0 +1,81 @@
+### ============================================================================
+### REST API LEARNING LAB - MANUAL REQUESTS
+### You can run these with VS Code REST Client extension, Postman, or curl!
+### ============================================================================
+
+### ----------------------------------------------------------------------------
+### 1. GOLANG BACKEND (PORT 8080)
+### ----------------------------------------------------------------------------
+
+### Golang: Health Check (Public)
+GET http://localhost:8080/api/health
+Accept: application/json
+
+### Golang: Register a New User (Public)
+# Notice we send JSON payload. Password will be hashed using bcrypt on the server!
+POST http://localhost:8080/api/register
+Content-Type: application/json
+
+{
+  "name": "Jane Developer",
+  "email": "jane@example.com",
+  "password": "securePassword456"
+}
+
+### Golang: Login with Seeded Demo Account (Public)
+# Returns a signed JSON Web Token (JWT) valid for 24 hours
+POST http://localhost:8080/api/login
+Content-Type: application/json
+
+{
+  "email": "demo@example.com",
+  "password": "password123"
+}
+
+### Golang: Attempt accessing subscriptions WITHOUT Token (Should Fail with 401)
+# Demonstrates how the AuthMiddleware blocks unauthorized visitors
+GET http://localhost:8080/api/subscriptions
+Accept: application/json
+
+### Golang: Access Protected Subscriptions WITH Bearer Token (Success 200)
+# Replace <YOUR_TOKEN_HERE> with the token from the login response
+GET http://localhost:8080/api/subscriptions
+Authorization: Bearer <YOUR_TOKEN_HERE>
+Accept: application/json
+
+
+### ----------------------------------------------------------------------------
+### 2. EXPRESS.JS BACKEND (PORT 5000)
+### ----------------------------------------------------------------------------
+
+### Express: Health Check (Public)
+GET http://localhost:5000/api/health
+Accept: application/json
+
+### Express: Register a New User (Public)
+POST http://localhost:5000/api/register
+Content-Type: application/json
+
+{
+  "name": "Jane Developer",
+  "email": "jane.express@example.com",
+  "password": "securePassword456"
+}
+
+### Express: Login with Seeded Demo Account (Public)
+POST http://localhost:5000/api/login
+Content-Type: application/json
+
+{
+  "email": "demo@example.com",
+  "password": "password123"
+}
+
+### Express: Attempt accessing subscriptions WITHOUT Token (Should Fail with 401)
+GET http://localhost:5000/api/subscriptions
+Accept: application/json
+
+### Express: Access Protected Subscriptions WITH Bearer Token (Success 200)
+GET http://localhost:5000/api/subscriptions
+Authorization: Bearer <YOUR_TOKEN_HERE>
+Accept: application/json
